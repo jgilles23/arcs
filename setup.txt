@@ -1,0 +1,3 @@
+Run in the Integrated Terminal:
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+tsc --watch
