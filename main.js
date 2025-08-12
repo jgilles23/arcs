@@ -1,3 +1,58 @@
+// Assault Dice: fill in with your data
+const assaultDice = [
+    // Example: each array is a face, add/remove symbols as needed
+    ['hit', 'hit'],
+    ['hit', 'hit', 'fire'],
+    ['hit', 'intercept'],
+    ['hit', 'fire'],
+    ['hit', 'fire'],
+    []
+];
+// Skirmish Dice: fill in with your data
+const skirmishDice = [
+    ['hit'],
+    ['hit'],
+    ['hit'],
+    [],
+    [],
+    []
+];
+// Raid Dice: fill in with your data
+const raidDice = [
+    ['intercept', 'key', 'key'],
+    ['fire', 'key'],
+    ['triangle', 'key'],
+    ['triangle', 'fire'],
+    ['triangle', 'fire'],
+    ['intercept']
+];
+// Run the simulation for a scenario and return a new scenario (result)
+function rollDice(input) {
+    // Count symbols for all dice
+    const symbolCounts = {
+        fire: 0,
+        intercept: 0,
+        hit: 0,
+        triangle: 0,
+        key: 0
+    };
+    function roll(dice, num) {
+        for (let i = 0; i < num; i++) {
+            const idx = Math.floor(Math.random() * dice.length);
+            const face = dice[idx];
+            if (face && Array.isArray(face)) {
+                for (const symbol of face) {
+                    symbolCounts[symbol]++;
+                }
+            }
+        }
+    }
+    roll(assaultDice, input.assaultDice);
+    roll(skirmishDice, input.skirmishDice);
+    roll(raidDice, input.raidDice);
+    console.log(symbolCounts);
+    return symbolCounts;
+}
 // Automatically add a scenario when the page loads
 window.addEventListener('DOMContentLoaded', () => {
     addScenarioBtn.click();
@@ -50,6 +105,9 @@ addScenarioBtn.addEventListener('click', () => {
     const damagedDefendingSpaceportsInput = createInput('damaged-defending-spaceports', 'Damaged Defending Spaceports');
     const attackerActionPipsInput = createInput('attacker-action-pips', 'Attacker Action Pips');
     attackerActionPipsInput.value = '1';
+    const assaultDiceInput = createInput('assault-dice', 'Assault Dice');
+    const skirmishDiceInput = createInput('skirmish-dice', 'Skirmish Dice');
+    const raidDiceInput = createInput('raid-dice', 'Raid Dice');
     // Goal select
     const goalWrapper = document.createElement('div');
     goalWrapper.style.display = 'flex';
@@ -88,10 +146,44 @@ addScenarioBtn.addEventListener('click', () => {
                 healthyDefendingSpaceports: Number(healthyDefendingSpaceportsInput.value),
                 damagedDefendingSpaceports: Number(damagedDefendingSpaceportsInput.value),
                 attackerActionPips: Number(attackerActionPipsInput.value),
+                assaultDice: Number(assaultDiceInput.value),
+                skirmishDice: Number(skirmishDiceInput.value),
+                raidDice: Number(raidDiceInput.value),
                 goal: goalSelect.value,
             };
             scenarios[currentIdx].scenario = scenario;
             console.log('Running scenario:', scenario);
+            rollDice(scenario);
+        }
+    });
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = 'Copy Scenario';
+    copyBtn.style.marginLeft = '8px';
+    copyBtn.addEventListener('click', () => {
+        // Copy current scenario values and create a new scenario with them
+        const currentIdx = Array.from(scenarioList.children).indexOf(li);
+        if (scenarios[currentIdx]) {
+            const s = scenarios[currentIdx];
+            addScenarioBtn.click();
+            // Find the last scenario just added
+            const lastIdx = scenarios.length - 1;
+            const lastScenario = scenarios[lastIdx];
+            if (lastScenario && lastScenario.inputs) {
+                const lastInputs = lastScenario.inputs;
+                lastInputs.healthyAttackingShipsInput.value = s.inputs.healthyAttackingShipsInput.value;
+                lastInputs.damagedAttackingShipsInput.value = s.inputs.damagedAttackingShipsInput.value;
+                lastInputs.healthyDefendingShipsInput.value = s.inputs.healthyDefendingShipsInput.value;
+                lastInputs.damagedDefendingShipsInput.value = s.inputs.damagedDefendingShipsInput.value;
+                lastInputs.healthyDefendingCitiesInput.value = s.inputs.healthyDefendingCitiesInput.value;
+                lastInputs.damagedDefendingCitiesInput.value = s.inputs.damagedDefendingCitiesInput.value;
+                lastInputs.healthyDefendingSpaceportsInput.value = s.inputs.healthyDefendingSpaceportsInput.value;
+                lastInputs.damagedDefendingSpaceportsInput.value = s.inputs.damagedDefendingSpaceportsInput.value;
+                lastInputs.attackerActionPipsInput.value = s.inputs.attackerActionPipsInput.value;
+                lastInputs.assaultDiceInput.value = s.inputs.assaultDiceInput.value;
+                lastInputs.skirmishDiceInput.value = s.inputs.skirmishDiceInput.value;
+                lastInputs.raidDiceInput.value = s.inputs.raidDiceInput.value;
+                lastInputs.goalSelect.value = s.inputs.goalSelect.value;
+            }
         }
     });
     const deleteBtn = document.createElement('button');
@@ -102,6 +194,7 @@ addScenarioBtn.addEventListener('click', () => {
         scenarios.splice(idx, 1);
     });
     li.appendChild(runBtn);
+    li.appendChild(copyBtn);
     li.appendChild(deleteBtn);
     scenarioList.appendChild(li);
     // Store scenario and inputs
@@ -117,6 +210,9 @@ addScenarioBtn.addEventListener('click', () => {
             healthyDefendingSpaceports: Number(healthyDefendingSpaceportsInput.value),
             damagedDefendingSpaceports: Number(damagedDefendingSpaceportsInput.value),
             attackerActionPips: Number(attackerActionPipsInput.value),
+            assaultDice: Number(assaultDiceInput.value),
+            skirmishDice: Number(skirmishDiceInput.value),
+            raidDice: Number(raidDiceInput.value),
             goal: goalSelect.value,
         },
         inputs: {
@@ -129,6 +225,9 @@ addScenarioBtn.addEventListener('click', () => {
             healthyDefendingSpaceportsInput,
             damagedDefendingSpaceportsInput,
             attackerActionPipsInput,
+            assaultDiceInput,
+            skirmishDiceInput,
+            raidDiceInput,
             goalSelect,
         }
     });
