@@ -1,3 +1,17 @@
 Run in the Integrated Terminal:
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 tsc --watch
+
+Recommend the strategy to achieve the goal at a fixed probability with minimal losses.
+1. Select a pool of strategies based on a genetic algorythm of the previous pool of strategies.
+    Starting strategies should always include all assult, skirmish, and raid. Plus some variations.
+    Variables: 
+        population_size_i is the population size at iteration i (index 0)
+        ?survivor_fraction_i need some way to establish the next population
+        heat_i is how much to vary the initial population for the next iteration
+            1 = completely random
+            0 = no change at all
+            as a linear interpolation between a new random value and what is in the population
+        trial_size_i is the number of trials to run on each member of the population
+
+1. Select from a pool of dice
