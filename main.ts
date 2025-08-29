@@ -167,8 +167,6 @@ function rollDice(selection: DiceSelection): SymbolCounts {
     roll(assaultDice, selection.assaultDice);
     roll(skirmishDice, selection.skirmishDice);
     roll(raidDice, selection.raidDice);
-
-    console.log(symbolCounts);
     return symbolCounts;
 }
 
@@ -260,11 +258,29 @@ function simulateDiceOptions(scenario: Scenario, numSimulations: number) {
     };
 }
 
-// Automatically add a scenario when the page loads
+// Automatically add a scenario and press the run scenario button when the page loads
 window.addEventListener('DOMContentLoaded', () => {
     addScenarioBtn.click();
+    // Find the first scenario's run button and click it
+    setTimeout(() => {
+        const firstScenarioItem = scenarioList.querySelector('.scenario-item');
+        if (firstScenarioItem) {
+            const runBtn = firstScenarioItem.querySelector('button');
+            if (runBtn) {
+                runBtn.click();
+            }
+        }
+    }, 100); // Delay to ensure scenario is added and DOM is updated 
 });
-// main.ts
+
+type BuildingAttackResults = {
+    healthyCities: number;
+    damagedCities: number;
+    healthySpaceports: number;
+    damagedSpaceports: number;
+    outrages: number;
+    trophies: number;
+};
 
 type Scenario = {
     healthyAttackingShips: number;
@@ -278,182 +294,140 @@ type Scenario = {
     attackerActionPips: number;
     diceSelection: DiceSelection;
     goal: 'complete destruction' | 'loss minimization' | 'key maximization';
-    keysAvailable?: number;
-    outragesProvoked?: number;
-    attackerTrophies?: number;
-    defenderTrophies?: number;
+    keysAvailable: number;
+    outragesProvoked: number;
+    attackerTrophies: number;
+    defenderTrophies: number;
 };
+
+const seenBuildingStates: { [key: string]: Array<BuildingAttackResults> } = {}; //Should be a key value pair where each key is a string and each value is a list of lists
+function getBruteBuildingDamageResults(hits: number, s: Scenario): Array<BuildingAttackResults> {
+    // Serialize hits-state
+    const stateKey = `${hits}:${s.healthyDefendingCities}-${s.damagedDefendingCities}-${s.healthyDefendingSpaceports}-${s.damagedDefendingSpaceports}`;
+    // See if the key has been seen before
+    if (seenBuildingStates[stateKey]) {
+        return seenBuildingStates[stateKey];
+    }
+    // Initialize results array
+    const results: Array<BuildingAttackResults> = [];
+    // See if we are in a zero hits scenario or a more hits than we have available points scenario
+    if (hits == 0) {
+        results.push({
+            healthyCities: s.healthyDefendingCities,
+            damagedCities: s.damagedDefendingCities,
+            healthySpaceports: s.healthyDefendingSpaceports,
+            damagedSpaceports: s.damagedDefendingSpaceports,
+            outrages: 0,
+            trophies: 0
+        });
+        return results;
+    }
+    let hitPointsAvailable = 2 * s.healthyDefendingCities + s.damagedDefendingCities + 2 * s.healthyDefendingSpaceports + s.damagedDefendingSpaceports;
+    if (hits >= hitPointsAvailable) {
+        results.push({
+            healthyCities: 0,
+            damagedCities: 0,
+            healthySpaceports: 0,
+            damagedSpaceports: 0,
+            outrages: s.healthyDefendingCities + s.damagedDefendingCities,
+            trophies: s.healthyDefendingCities + s.damagedDefendingCities + s.healthyDefendingSpaceports + s.damagedDefendingSpaceports
+        });
+        return results;
+    }
+    // Perform a brute force search
+    for (let HC = 0; HC <= s.healthyDefendingCities; HC++) {
+        for (let DC = 0; DC <= (s.damagedDefendingCities + (s.healthyDefendingCities - HC)); DC++) {
+            for (let HS = 0; HS <= s.healthyDefendingSpaceports; HS++) {
+                for (let DS = 0; DS <= (s.damagedDefendingSpaceports + (s.healthyDefendingSpaceports - HS)); DS++) {
+                    let hitPointsUsed = 2 * (s.healthyDefendingCities - HC) + (s.damagedDefendingCities - DC) + 2 * (s.healthyDefendingSpaceports - HS) + (s.damagedDefendingSpaceports - DS);
+                    //Check if the correct number of hit points were used
+                    if (hitPointsUsed !== hits) continue;
+                    //Valid result, push to the results array
+                    results.push({
+                        healthyCities: HC,
+                        damagedCities: DC,
+                        healthySpaceports: HS,
+                        damagedSpaceports: DS,
+                        outrages: s.healthyDefendingCities + s.damagedDefendingCities - (HC + DC),
+                        trophies: (s.healthyDefendingCities - HC) + (s.damagedDefendingCities - DC) + (s.healthyDefendingSpaceports - HS) + (s.damagedDefendingSpaceports - DS)
+                    });
+                }
+            }
+        }
+    }
+    //Save the results as having been seen before
+    seenBuildingStates[stateKey] = results;
+    return results;
+}
+
 // Returns all possible ways symbols can be applied to a scenario
 function applySymbolsToScenario(startScenario: Scenario, symbolCounts: SymbolCounts): Scenario[] {
+    // We are going to completely re-write this function as the breath first seach is actually far more complicated than we need to go
+    // This instead can be accomplished with relativly simple combinatorics that should run much faster
+
+    function getHealthyDamagedResults(
+        hits: number,
+        healthyShips: number,
+        damagedShips: number
+    ): { healthy: number; damaged: number; trophies: number }[] {
+        let hitsToAttackerHealthyShips = Math.min(hits, healthyShips);
+        let hitsToAttackerDamagedShips = hits - hitsToAttackerHealthyShips;
+        let healthy = healthyShips - hitsToAttackerHealthyShips; //Fewest healthy ships possible
+        let damaged = Math.max(damagedShips + hitsToAttackerHealthyShips - hitsToAttackerDamagedShips, 0); //Most damaged ships possible
+        const healthyDamagedResults: { healthy: number; damaged: number; trophies: number }[] = [];
+        while (healthy <= healthyShips && damaged >= 0) {
+            healthyDamagedResults.push({ healthy, damaged, trophies: healthyShips + damagedShips - (healthy + damaged) });
+            healthy++;
+            damaged -= 2;
+        }
+        return healthyDamagedResults;
+    }
+
     // Helper to deep clone a scenario
     function cloneScenario(s: Scenario): Scenario {
         return JSON.parse(JSON.stringify(s));
     }
 
+    //Calculate the output scenarios for the attacking ships
+    let hitsToAttacker = symbolCounts.fire + (symbolCounts.intercept > 0 ? startScenario.healthyDefendingShips : 0);
+    let attackerShipResults = getHealthyDamagedResults(hitsToAttacker, startScenario.healthyAttackingShips, startScenario.damagedAttackingShips);
+    console.log("Attacker Ship Results:", attackerShipResults);
+    //Calculate the output scenarios for the defending ships
+    let defenderShipResults = getHealthyDamagedResults(symbolCounts.hit, startScenario.healthyDefendingShips, startScenario.damagedDefendingShips);
+    console.log("Defender Ship Results:", defenderShipResults);
+    let defenderHitPointsAvailable = 2 * startScenario.healthyDefendingShips + startScenario.damagedDefendingShips;
+    //Calculate the output scenarios for the defending buildings
+    let hitsToDefenderBuildings = symbolCounts.triangle + Math.max(symbolCounts.hit - defenderHitPointsAvailable, 0);
+    let defenderBuildingResults = getBruteBuildingDamageResults(hitsToDefenderBuildings, startScenario);
+    console.log("Defender Building Results:", defenderBuildingResults);
+
     // Track all possible scenarios
     const results: Scenario[] = [];
-    const seen: Set<string> = new Set();
-
-    // For combinatorial application, use a queue (BFS)
-    const queue: { scenario: Scenario; fire: number; intercept: number; hit: number; triangle: number; key: number }[] = [
-        { scenario: cloneScenario(startScenario), ...symbolCounts }
-    ];
-
-    while (queue.length > 0) {
-        const { scenario, fire, intercept, hit, triangle, key } = queue.shift()!;
-        let s = cloneScenario(scenario);
-        let outrages = s.outragesProvoked || 0;
-        let attackerTrophies = s.attackerTrophies || 0;
-        let defenderTrophies = s.defenderTrophies || 0;
-        let keysAvailable = s.keysAvailable || 0;
-
-        // Helper to serialize scenario and remaining symbols
-        function serializeState(fire: number, intercept: number, hit: number, triangle: number, key: number): string {
-            return JSON.stringify({
-                fire,
-                intercept,
-                hit,
-                triangle,
-                key
-            });
-        }
-
-        const stateKey = serializeState(fire, intercept, hit, triangle, key);
-        //Exit if the state has been seen before
-        if (seen.has(stateKey)) continue;
-        seen.add(stateKey);
-
-        // Decision points for each symbol type
-        // 1. For each fire, try all possible ways to apply to healthy/damaged attacking ships
-        if (fire > 0 && (s.healthyAttackingShips > 0 || s.damagedAttackingShips > 0)) {
-            if (s.healthyAttackingShips > 0) {
-                let next = cloneScenario(s);
-                next.healthyAttackingShips--;
-                next.damagedAttackingShips++;
-                queue.push({ scenario: next, fire: fire - 1, intercept, hit, triangle, key });
+    // For each combination of attacking and defending ships and building results create a new scenario 
+    for (const AS of attackerShipResults) {
+        for (const DS of defenderShipResults) {
+            for (const B of defenderBuildingResults) {
+                const newScenario: Scenario = {
+                    healthyAttackingShips: AS.healthy,
+                    damagedAttackingShips: AS.damaged,
+                    healthyDefendingShips: DS.healthy,
+                    damagedDefendingShips: DS.damaged,
+                    healthyDefendingCities: B.healthyCities,
+                    damagedDefendingCities: B.damagedCities,
+                    healthyDefendingSpaceports: B.healthySpaceports,
+                    damagedDefendingSpaceports: B.damagedSpaceports,
+                    attackerActionPips: startScenario.attackerActionPips - 1,
+                    diceSelection: startScenario.diceSelection, //This should really not be contained in the scenario TODO
+                    goal: startScenario.goal,
+                    keysAvailable: AS.healthy + AS.damaged > 0 ? symbolCounts.key : 0, //keys avaliable only if ships remaining
+                    outragesProvoked: B.outrages,
+                    attackerTrophies: DS.trophies + B.trophies,
+                    defenderTrophies: AS.trophies
+                };
+                results.push(newScenario);
             }
-            if (s.damagedAttackingShips > 0) {
-                let next = cloneScenario(s);
-                next.damagedAttackingShips--;
-                next.defenderTrophies = (next.defenderTrophies || 0) + 1;
-                queue.push({ scenario: next, fire: fire - 1, intercept, hit, triangle, key });
-            }
-            continue;
-        }
-
-        // 2. For each intercept, hit an attacking ship for each healthy defending ship
-        if (intercept > 0 && s.healthyDefendingShips > 0 && (s.healthyAttackingShips > 0 || s.damagedAttackingShips > 0)) {
-            for (let i = 0; i < s.healthyDefendingShips; i++) {
-                if (s.healthyAttackingShips > 0) {
-                    let next = cloneScenario(s);
-                    next.healthyAttackingShips--;
-                    next.damagedAttackingShips++;
-                    queue.push({ scenario: next, fire, intercept: 0, hit, triangle, key }); //only one intercept allowed
-                }
-                if (s.damagedAttackingShips > 0) {
-                    let next = cloneScenario(s);
-                    next.damagedAttackingShips--;
-                    next.defenderTrophies = (next.defenderTrophies || 0) + 1;
-                    queue.push({ scenario: next, fire, intercept: 0, hit, triangle, key });
-                }
-            }
-            continue;
-        }
-
-        // 3. For each hit, try all possible ways to apply to defending ships/cities/spaceports
-        if (hit > 0) {
-            const shipsLeft = s.healthyDefendingShips + s.damagedDefendingShips;
-            if (shipsLeft > 0) {
-                if (s.healthyDefendingShips > 0) {
-                    let next = cloneScenario(s);
-                    next.healthyDefendingShips--;
-                    next.damagedDefendingShips++;
-                    queue.push({ scenario: next, fire, intercept, hit: hit - 1, triangle, key });
-                }
-                if (s.damagedDefendingShips > 0) {
-                    let next = cloneScenario(s);
-                    next.damagedDefendingShips--;
-                    next.attackerTrophies = (next.attackerTrophies || 0) + 1;
-                    queue.push({ scenario: next, fire, intercept, hit: hit - 1, triangle, key });
-                }
-            } else {
-                if (s.healthyDefendingCities > 0) {
-                    let next = cloneScenario(s);
-                    next.healthyDefendingCities--;
-                    next.damagedDefendingCities++;
-                    queue.push({ scenario: next, fire, intercept, hit: hit - 1, triangle, key });
-                }
-                if (s.damagedDefendingCities > 0) {
-                    let next = cloneScenario(s);
-                    next.damagedDefendingCities--;
-                    next.outragesProvoked = (next.outragesProvoked || 0) + 1;
-                    next.attackerTrophies = (next.attackerTrophies || 0) + 1;
-                    queue.push({ scenario: next, fire, intercept, hit: hit - 1, triangle, key });
-                }
-                if (s.healthyDefendingSpaceports > 0) {
-                    let next = cloneScenario(s);
-                    next.healthyDefendingSpaceports--;
-                    next.damagedDefendingSpaceports++;
-                    queue.push({ scenario: next, fire, intercept, hit: hit - 1, triangle, key });
-                }
-                if (s.damagedDefendingSpaceports > 0) {
-                    let next = cloneScenario(s);
-                    next.damagedDefendingSpaceports--;
-                    next.attackerTrophies = (next.attackerTrophies || 0) + 1;
-                    queue.push({ scenario: next, fire, intercept, hit: hit - 1, triangle, key });
-                }
-            }
-            continue;
-        }
-
-        // 4. For each triangle, try all possible ways to apply to cities/spaceports
-        if (triangle > 0) {
-            if (s.healthyDefendingCities > 0) {
-                let next = cloneScenario(s);
-                next.healthyDefendingCities--;
-                next.damagedDefendingCities++;
-                queue.push({ scenario: next, fire, intercept, hit, triangle: triangle - 1, key });
-            }
-            if (s.damagedDefendingCities > 0) {
-                let next = cloneScenario(s);
-                next.damagedDefendingCities--;
-                next.outragesProvoked = (next.outragesProvoked || 0) + 1;
-                next.attackerTrophies = (next.attackerTrophies || 0) + 1;
-                queue.push({ scenario: next, fire, intercept, hit, triangle: triangle - 1, key });
-            }
-            if (s.healthyDefendingSpaceports > 0) {
-                let next = cloneScenario(s);
-                next.healthyDefendingSpaceports--;
-                next.damagedDefendingSpaceports++;
-                queue.push({ scenario: next, fire, intercept, hit, triangle: triangle - 1, key });
-            }
-            if (s.damagedDefendingSpaceports > 0) {
-                let next = cloneScenario(s);
-                next.damagedDefendingSpaceports--;
-                next.attackerTrophies = (next.attackerTrophies || 0) + 1;
-                queue.push({ scenario: next, fire, intercept, hit, triangle: triangle - 1, key });
-            }
-            continue;
-        }
-
-        // 5. If attacker has any ships left, count keys
-        if (s.healthyAttackingShips + s.damagedAttackingShips > 0) {
-            keysAvailable += key;
-        }
-        s.keysAvailable = keysAvailable;
-        s.outragesProvoked = outrages;
-        s.attackerTrophies = attackerTrophies;
-        s.defenderTrophies = defenderTrophies;
-
-        // Only add unique scenarios to results
-        // Semi dangerous, since we are using two different data structures in seen
-        const scenarioKey = JSON.stringify(s);
-        if (!seen.has(scenarioKey)) {
-            results.push(s);
-            seen.add(scenarioKey);
         }
     }
-
     return results;
 }
 
@@ -516,18 +490,29 @@ addScenarioBtn.addEventListener('click', () => {
     }
 
     const healthyAttackingShipsInput = createInput('healthy-attacking-ships', 'Healthy Attacking Ships');
+    healthyAttackingShipsInput.value = '2';
     const damagedAttackingShipsInput = createInput('damaged-attacking-ships', 'Damaged Attacking Ships');
+    damagedAttackingShipsInput.value = '1';
     const healthyDefendingShipsInput = createInput('healthy-defending-ships', 'Healthy Defending Ships');
+    healthyDefendingShipsInput.value = '1';
     const damagedDefendingShipsInput = createInput('damaged-defending-ships', 'Damaged Defending Ships');
+    damagedDefendingShipsInput.value = '1';
     const healthyDefendingCitiesInput = createInput('healthy-defending-cities', 'Healthy Defending Cities');
+    healthyDefendingCitiesInput.value = '0';
     const damagedDefendingCitiesInput = createInput('damaged-defending-cities', 'Damaged Defending Cities');
+    damagedDefendingCitiesInput.value = '1';
     const healthyDefendingSpaceportsInput = createInput('healthy-defending-spaceports', 'Healthy Defending Spaceports');
+    healthyDefendingSpaceportsInput.value = '1';
     const damagedDefendingSpaceportsInput = createInput('damaged-defending-spaceports', 'Damaged Defending Spaceports');
+    damagedDefendingSpaceportsInput.value = '0';
     const attackerActionPipsInput = createInput('attacker-action-pips', 'Attacker Action Pips');
     attackerActionPipsInput.value = '1';
     const assaultDiceInput = createInput('assault-dice', 'Assault Dice');
+    assaultDiceInput.value = '1';
     const skirmishDiceInput = createInput('skirmish-dice', 'Skirmish Dice');
+    skirmishDiceInput.value = '1';
     const raidDiceInput = createInput('raid-dice', 'Raid Dice');
+    raidDiceInput.value = '1';
 
     // Goal select
     const goalWrapper = document.createElement('div');
@@ -574,18 +559,23 @@ addScenarioBtn.addEventListener('click', () => {
                     raidDice: Number(raidDiceInput.value)
                 },
                 goal: goalSelect.value as Scenario['goal'],
+                keysAvailable: 0,
+                outragesProvoked: 0,
+                attackerTrophies: 0,
+                defenderTrophies: 0
             };
             scenarios[currentIdx].scenario = scenario;
             console.log('Running scenario:', scenario);
             rollDice(scenario.diceSelection);
 
             // --- Run the test for this scenario ---
+            console.log('STARTING TEST FOR SCENARIO:', scenario);
             const diceOptions = generateDiceOptions(scenario);
             if (!diceOptions || diceOptions.length === 0) {
                 console.log('No dice options available for scenario.');
                 return;
             }
-            const randomIdx = Math.floor(Math.random() * diceOptions.length);
+            const randomIdx = 15 //Math.floor(Math.random() * diceOptions.length);
             const randomDiceSelection = diceOptions[randomIdx];
             if (!randomDiceSelection) {
                 console.log('No valid dice selection.');
@@ -601,8 +591,7 @@ addScenarioBtn.addEventListener('click', () => {
                 console.log('No possible outcome scenarios.');
                 return;
             }
-            console.log('User scenario:', scenario);
-            console.log('Random dice selection:', randomDiceSelection);
+            console.log(`Random dice selection (${randomIdx} of ${diceOptions.length}):`, randomDiceSelection);
             console.log('Rolled symbol counts:', symbolCounts);
             console.log('Possible outcome scenarios:');
             possibleScenarios.forEach((sc, i) => {
@@ -676,6 +665,10 @@ addScenarioBtn.addEventListener('click', () => {
                 raidDice: Number(raidDiceInput.value)
             },
             goal: goalSelect.value as Scenario['goal'],
+            keysAvailable: 0,
+            outragesProvoked: 0,
+            attackerTrophies: 0,
+            defenderTrophies: 0
         },
         inputs: {
             healthyAttackingShipsInput,
