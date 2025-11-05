@@ -87,22 +87,37 @@ class ScenarioNode {
         this.scenario = scenario;
         this.edges = [];
         this.edges = generateDiceOptions(scenario).map(selection => new DiceNode(selection, scenario));
+        console.log(this.edges)
     }
 }
 
 class DiceNode {
     selection: DiceSelection
     scenario: Scenario
+    edges: DiceResultsNode[]
 
     constructor(selection: DiceSelection, scenario: Scenario) {
         this.selection = selection;
         this.scenario = scenario;
+        this.edges = []
+    }
+
+    sample() {
+        console.log("here")
     }
 
     roll(): SymbolCounts {
         // Roll the dice based on the selection
         let symbolCounts = rollDice(this.selection);
         return symbolCounts;
+    }
+}
+
+class DiceResultsNode {
+    symbolCounts: SymbolCounts;
+
+    constructor(symbolCounts: SymbolCounts) {
+        this.symbolCounts = symbolCounts;
     }
 }
 
@@ -383,11 +398,6 @@ function applySymbolsToScenario(startScenario: Scenario, symbolCounts: SymbolCou
         return healthyDamagedResults;
     }
 
-    // Helper to deep clone a scenario
-    function cloneScenario(s: Scenario): Scenario {
-        return JSON.parse(JSON.stringify(s));
-    }
-
     //Calculate the output scenarios for the attacking ships
     let hitsToAttacker = symbolCounts.fire + (symbolCounts.intercept > 0 ? startScenario.healthyDefendingShips : 0);
     let attackerShipResults = getHealthyDamagedResults(hitsToAttacker, startScenario.healthyAttackingShips, startScenario.damagedAttackingShips);
@@ -566,7 +576,9 @@ addScenarioBtn.addEventListener('click', () => {
             };
             scenarios[currentIdx].scenario = scenario;
             console.log('Running scenario:', scenario);
-            rollDice(scenario.diceSelection);
+            let root = new ScenarioNode(scenario);
+            console.log(root);
+            return
 
             // --- Run the test for this scenario ---
             console.log('STARTING TEST FOR SCENARIO:', scenario);
@@ -575,13 +587,13 @@ addScenarioBtn.addEventListener('click', () => {
                 console.log('No dice options available for scenario.');
                 return;
             }
-            const randomIdx = 15 //Math.floor(Math.random() * diceOptions.length);
+            const randomIdx = 15 //Math.floor(Math.random() * diceOptions.length); 
             const randomDiceSelection = diceOptions[randomIdx];
             if (!randomDiceSelection) {
                 console.log('No valid dice selection.');
                 return;
             }
-            const symbolCounts = rollDice(randomDiceSelection);
+            //const symbolCounts = rollDice(randomDiceSelection);
             if (!symbolCounts) {
                 console.log('No symbol counts generated.');
                 return;
